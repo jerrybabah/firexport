@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Firexport",
+  "description": "One-click firestore export",
+  "version": "0.0.1",
+  "host_permissions": [
+    "https://console.firebase.google.com/*"
+  ],
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icons/inactive_icon16.png",
+      "48": "icons/inactive_icon48.png",
+      "128": "icons/inactive_icon128.png"
+    },
+    "default_title": "[Firexport] Cannot export here"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://console.firebase.google.com/*"
+      ],
+      "js": [
+        "content.js"
+      ]
+    }
+  ],
+  "icons": {
+    "16": "icons/inactive_icon16.png",
+    "48": "icons/inactive_icon48.png",
+    "128": "icons/inactive_icon128.png"
+  }
+}
