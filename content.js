@@ -1,33 +1,18 @@
-// Helper function to escape special characters in CSV
-function escapeCSV(value) {
-  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+execute();
+
+// Execute the export function
+async function execute() {
+  insertStyle();
+
+  startLoading();
+  try {
+    await exportQueryResults();
+  } catch (e) {
+    console.log(e);
+    alert('fail to export firestore');
+  } finally {
+    endLoading();
   }
-  return value;
-}
-
-// Helper function to convert array of objects to CSV
-function arrayToCSV(data) {
-  const csvRows = [];
-  const headers = Object.keys(data[0]);
-  csvRows.push(headers.map(header => escapeCSV(header)).join(','));
-
-  for (const row of data) {
-    const values = headers.map(header => {
-      let cellValue = '' + row[header];
-      if (row[header] === null) {
-        cellValue = 'null';
-      } else if (Array.isArray(row[header])) {
-        cellValue = JSON.stringify(row[header]);
-      } else if (typeof row[header] === 'object') {
-        cellValue = JSON.stringify(row[header]);
-      }
-      return escapeCSV(cellValue);
-    });
-    csvRows.push(values.join(','));
-  }
-
-  return csvRows.join('\n');
 }
 
 // Function to scrape table data and export to CSV
@@ -115,5 +100,120 @@ async function exportQueryResults() {
   URL.revokeObjectURL(url);
 }
 
-// Execute the export function
-exportQueryResults();
+// Helper function to convert array of objects to CSV
+function arrayToCSV(data) {
+  const csvRows = [];
+  const headers = Object.keys(data[0]);
+  csvRows.push(headers.map(header => escapeCSV(header)).join(','));
+
+  for (const row of data) {
+    const values = headers.map(header => {
+      let cellValue = '' + row[header];
+      if (row[header] === null) {
+        cellValue = 'null';
+      } else if (Array.isArray(row[header])) {
+        cellValue = JSON.stringify(row[header]);
+      } else if (typeof row[header] === 'object') {
+        cellValue = JSON.stringify(row[header]);
+      }
+      return escapeCSV(cellValue);
+    });
+    csvRows.push(values.join(','));
+  }
+
+  return csvRows.join('\n');
+}
+
+// Helper function to escape special characters in CSV
+function escapeCSV(value) {
+  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function startLoading() {
+  const loader = getLoader();
+  loader.classList.add('active');
+}
+
+function endLoading() {
+  const loader = getLoader();
+  loader.classList.remove('active');
+}
+
+function getLoader() {
+  let loader = document.getElementById('firexport-loader');
+
+  if (!loader) {
+    const newLoaderContent = document.createElement('div');
+    newLoaderContent.classList.add('loader');
+
+    const newLoader = document.createElement('div');
+    newLoader.id = 'firexport-loader';
+    newLoader.appendChild(newLoaderContent);
+
+    document.body.appendChild(newLoader);
+
+    loader = newLoader;
+  }
+
+  return loader;
+}
+
+function insertStyle() {
+  const style = document.getElementById('firexport-loader-style');
+
+  if (style) {
+    return;
+  }
+
+  const newStyle = document.createElement('style');
+  newStyle.id = 'firexport-loader-style';
+  newStyle.textContent = `
+    #firexport-loader.active {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    #firexport-loader.active .loader {
+      width: 50px;
+      aspect-ratio: 1;
+      display:grid;
+      -webkit-mask: conic-gradient(from 15deg,#0000,#000);
+      animation: l26 1s infinite steps(12);
+    }
+    #firexport-loader.active .loader,
+    #firexport-loader.active .loader:before,
+    #firexport-loader.active .loader:after{
+      background:
+        radial-gradient(closest-side at 50% 12.5%,
+        #f03355 96%,#0000) 50% 0/20% 80% repeat-y,
+        radial-gradient(closest-side at 12.5% 50%,
+        #f03355 96%,#0000) 0 50%/80% 20% repeat-x;
+    }
+    #firexport-loader.active .loader:before,
+    #firexport-loader.active .loader:after {
+      content: "";
+      grid-area: 1/1;
+      transform: rotate(30deg);
+    }
+    #firexport-loader.active .loader:after {
+      transform: rotate(60deg);
+    }
+
+    @keyframes l26 {
+      100% {transform:rotate(1turn)}
+    }
+  `;
+
+  document.head.appendChild(newStyle);
+}
