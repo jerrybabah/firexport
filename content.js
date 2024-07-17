@@ -34,12 +34,18 @@ function arrayToCSV(data) {
 async function exportQueryResults() {
   let results = [];
   let isLastPage = false;
+  let tableNotFoundCount = 0;
 
   do {
+    if (tableNotFoundCount > 5) {
+      break;
+    }
+
     // Scrape current page table
     const table = document.querySelector('table');
     if (!table) {
-      continue
+      tableNotFoundCount += 1
+      continue;
     }
 
     const headers = Array.from(table.querySelectorAll('th')).map(th => th.innerText.trim());
