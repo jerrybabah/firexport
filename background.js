@@ -3,11 +3,17 @@ function checkUrlAndView(url) {
   const pathSegments = urlObj.pathname.split('/');
 
   // Check if URL matches the required pattern
-  if (pathSegments.length >= 6 &&
+  if ((
+    pathSegments.length > 4 &&
     pathSegments[1] === 'project' &&
     pathSegments[3] === 'firestore' &&
-    pathSegments[4] === 'databases') {
-
+    pathSegments[4] === 'databases'
+  ) || (
+      pathSegments.length > 6 &&
+      pathSegments[3] === 'project' &&
+      pathSegments[5] === 'firestore' &&
+      pathSegments[6] === 'databases'
+    )) {
     const viewParam = urlObj.searchParams.get("view");
     return viewParam;
   }
