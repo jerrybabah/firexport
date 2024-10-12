@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Firexport",
   "description": "One-click firestore export",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "host_permissions": [
     "https://console.firebase.google.com/*"
   ],

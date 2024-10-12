@@ -1,176 +1,84 @@
-execute();
+(async () => {
+  initStyle()
+  initLoader()
 
-// Execute the export function
-async function execute() {
-  insertStyle();
+  const state = initState()
 
-  startLoading();
+  if (state.isExporting) {
+    return
+  }
+
   try {
-    await exportQueryResults();
-  } catch (e) {
-    console.log(e);
-    alert('fail to export firestore');
-  } finally {
-    endLoading();
-  }
-}
+    state.isExporting = true
 
-// Function to scrape table data and export to CSV
-async function exportQueryResults() {
-  let results = [];
-  let isLastPage = false;
-  let tableNotFoundCount = 0;
+    /**
+     * STEP1: 첫 번째 페이지로 이동
+     */
+    let isFirstPage = !checkMovableTo('prev')
 
-  do {
-    if (tableNotFoundCount > 5) {
-      break;
+    while (!isFirstPage) {
+      await moveTo('prev')
+      isFirstPage = !checkMovableTo('prev')
+
+      await new Promise((resolve) => setTimeout(resolve, 10))
     }
 
-    // Scrape current page table
-    const table = document.querySelector('table');
-    if (!table) {
-      tableNotFoundCount += 1
-      continue;
-    }
+    /**
+     * STEP2: 페이지를 차례로 이동하며 데이터 뽑아내기
+     */
+    const totalEntities = []
+    let isLastPageScraped = false
 
-    const headers = Array.from(table.querySelectorAll('th')).map(th => th.innerText.trim());
-    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    while (!isLastPageScraped) {
+      const entities = scrapTable()
+      totalEntities.push(...entities)
 
-    for (const row of rows) {
-      const cells = row.querySelectorAll('td');
-      const rowData = {};
-      cells.forEach((cell, i) => {
-        const cellValue = cell.innerText.trim();
+      const isLastPage = !checkMovableTo('next')
 
-        // Convert string representation to actual type
-        if (cellValue === 'true' || cellValue === 'false') {
-          rowData[headers[i]] = cellValue === 'true'; // boolean
+      if (isLastPage) {
+        isLastPageScraped = true
 
-        } else if (cellValue === 'null') {
-          rowData[headers[i]] = null; // null
+      } else {
+        await moveTo('next')
 
-        } else if (!isNaN(Number(cellValue))) {
-          rowData[headers[i]] = Number(cellValue); // number
-
-        } else if (cellValue.startsWith('["') && cellValue.endsWith('"]')) {
-          rowData[headers[i]] = JSON.parse(cellValue); // array
-
-        } else if (cellValue.startsWith('{') && cellValue.endsWith('}')) {
-          const jsonString = cellValue.replace(/(\w+):/g, '"$1":');
-          rowData[headers[i]] = JSON.parse(jsonString); // map
-
-        } else if (cellValue.includes('°')) {
-          rowData[headers[i]] = cellValue; // geolocation (string representation)
-
-        } else if (cellValue.startsWith('/')) {
-          rowData[headers[i]] = cellValue; // reference (string representation)
-
-        } else if (cellValue.includes('UTC')) {
-          rowData[headers[i]] = cellValue; // datetime (string representation)
-
-        } else {
-          rowData[headers[i]] = cellValue; // string or id
-        }
-      });
-      results.push(rowData);
-    }
-
-    // Check if last page
-    const nextPageButton = document.querySelector('#main > fire-router-outlet > firestore-base > f7e-data > div > div.viewer-container > f7e-query-view > f7e-data-table > mat-card > mat-paginator > div > div > div.mat-mdc-paginator-range-actions > button.mat-mdc-tooltip-trigger.mat-mdc-paginator-navigation-next.mdc-icon-button.mat-mdc-icon-button.mat-unthemed.mat-mdc-button-base');
-
-    if (nextPageButton && !nextPageButton.disabled) {
-      nextPageButton.click();
-      await new Promise(resolve => setTimeout(resolve, 100)); // Wait for the next page to load
-    } else {
-      isLastPage = true
-    }
-
-  } while (!isLastPage);
-
-  // Convert results to CSV
-  const csv = arrayToCSV(results);
-
-  // Create a downloadable link
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `firexport_${Date.now()}.csv`;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-// Helper function to convert array of objects to CSV
-function arrayToCSV(data) {
-  const csvRows = [];
-  const headers = Object.keys(data[0]);
-  csvRows.push(headers.map(header => escapeCSV(header)).join(','));
-
-  for (const row of data) {
-    const values = headers.map(header => {
-      let cellValue = '' + row[header];
-      if (row[header] === null) {
-        cellValue = 'null';
-      } else if (Array.isArray(row[header])) {
-        cellValue = JSON.stringify(row[header]);
-      } else if (typeof row[header] === 'object') {
-        cellValue = JSON.stringify(row[header]);
+        await new Promise((resolve) => setTimeout(resolve, 10))
       }
-      return escapeCSV(cellValue);
-    });
-    csvRows.push(values.join(','));
+    }
+
+    /**
+     * STEP3: csv로 변환
+     */
+    const csv = entitiesToCsv(totalEntities)
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `firexport_${Date.now()}.csv`
+
+    a.click()
+
+    URL.revokeObjectURL(url)
+
+  } catch (e) {
+    console.log(e)
+    alert('fail to export')
+
+  } finally {
+    state.isExporting = false
+  }
+})()
+
+function initStyle() {
+  const alreadyStyle = document.getElementById('firexport-loader-style')
+
+  if (alreadyStyle) {
+    return
   }
 
-  return csvRows.join('\n');
-}
-
-// Helper function to escape special characters in CSV
-function escapeCSV(value) {
-  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
-
-function startLoading() {
-  const loader = getLoader();
-  loader.classList.add('active');
-}
-
-function endLoading() {
-  const loader = getLoader();
-  loader.classList.remove('active');
-}
-
-function getLoader() {
-  let loader = document.getElementById('firexport-loader');
-
-  if (!loader) {
-    const newLoaderContent = document.createElement('div');
-    newLoaderContent.classList.add('loader');
-
-    const newLoader = document.createElement('div');
-    newLoader.id = 'firexport-loader';
-    newLoader.appendChild(newLoaderContent);
-
-    document.body.appendChild(newLoader);
-
-    loader = newLoader;
-  }
-
-  return loader;
-}
-
-function insertStyle() {
-  const style = document.getElementById('firexport-loader-style');
-
-  if (style) {
-    return;
-  }
-
-  const newStyle = document.createElement('style');
-  newStyle.id = 'firexport-loader-style';
-  newStyle.textContent = `
+  const style = document.createElement('style')
+  style.id = 'firexport-loader-style'
+  style.textContent = `
     #firexport-loader.active {
       position: fixed;
       top: 0;
@@ -215,5 +123,213 @@ function insertStyle() {
     }
   `;
 
-  document.head.appendChild(newStyle);
+  document.head.appendChild(style)
+}
+
+function initLoader() {
+  const alreadyLoader = document.getElementById('firexport-loader')
+
+  if (alreadyLoader) {
+    return
+  }
+
+  const loaderContent = document.createElement('div')
+  loaderContent.classList.add('loader')
+
+  const loader = document.createElement('div')
+  loader.id = 'firexport-loader'
+  loader.appendChild(loaderContent)
+
+  document.body.appendChild(loader)
+}
+
+function initState() {
+  const loader = document.getElementById('firexport-loader')
+  const isExporting = loader.classList.contains('active')
+
+  const state = new Proxy(
+    { isExporting },
+    {
+      set(target, prop, newValue) {
+        if (prop !== 'isExporting') {
+          target[prop] = newValue
+          return true
+        }
+
+        if (typeof newValue !== 'boolean') {
+          throw new Error('type error')
+        }
+
+        const loader = document.getElementById('firexport-loader')
+
+        if (!loader) {
+          throw new Error('initLoader required')
+        }
+
+        if (newValue) {
+          loader.classList.add('active')
+        } else {
+          loader.classList.remove('active')
+        }
+
+        target[prop] = newValue
+        return true
+      }
+    },
+  )
+
+  return state
+}
+
+function checkMovableTo(direction) {
+  if (direction === 'prev') {
+    const prevButton = document.querySelector('mat-paginator button[aria-label="Previous page"]')
+
+    if (!prevButton) {
+      throw new Error('no prev button')
+    }
+
+    const canPrev = prevButton.getAttribute('aria-disabled') !== 'true'
+    return canPrev
+
+  } else if (direction === 'next') {
+    const nextButton = document.querySelector('mat-paginator button[aria-label="Next page"]')
+
+    if (!nextButton) {
+      throw new Error('no next button')
+    }
+
+    const canNext = nextButton.getAttribute('aria-disabled') !== 'true'
+    return canNext
+
+  } else {
+    throw new Error(`unknown direction: ${direction}`)
+  }
+}
+
+function moveTo(direction) {
+  const movePromise = new Promise((resolve, reject) => {
+    const observer = new MutationObserver((mutations) => {
+      const childrenMutation = mutations.find((mutation) => mutation.type === 'childList')
+
+      if (!childrenMutation) {
+        return
+      }
+
+      resolve()
+      observer.disconnect()
+    })
+
+    const tbody = document.querySelector('table tbody')
+    observer.observe(tbody, { childList: true })
+
+    const prevButton = document.querySelector('mat-paginator button[aria-label="Previous page"]')
+    const nextButton = document.querySelector('mat-paginator button[aria-label="Next page"]')
+
+    if (!prevButton || !nextButton) {
+      reject(new Error('no navigation button'))
+    }
+
+    if (direction === 'prev') {
+      prevButton.click()
+
+    } else if (direction === 'next') {
+      nextButton.click()
+
+    } else {
+      reject(new Error(`unknown direction: ${direction}`))
+    }
+  })
+
+  const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1000))
+
+  return Promise.race([movePromise, timeoutPromise])
+}
+
+function scrapTable() {
+  const table = document.querySelector('table')
+
+  if (!table) {
+    throw new Error('no table')
+  }
+
+  const header = Array.from(table.querySelectorAll('th')).map(th => th.innerText.trim())
+  const rows = Array.from(table.querySelectorAll('tbody tr'))
+
+  const entities = rows.map((row) => {
+    const cells = Array.from(row.querySelectorAll('td'))
+
+    const entity = cells.reduce((prevEntity, cell, i) => {
+      const key = header[i]
+
+      const cellText = cell.innerText.trim()
+      const value = convertStringToType(cellText)
+
+      return {
+        ...prevEntity,
+        [key]: value,
+      }
+    }, {})
+
+    return entity
+  })
+
+  return entities
+}
+
+function convertStringToType(string) {
+  if (string === 'true' || string === 'false') {
+    return string === 'true' // boolean
+
+  } else if (string === 'null') {
+    return null // null
+
+  } else if (!isNaN(Number(string))) {
+    return Number(string) // number
+
+  } else if (string.startsWith('["') && string.endsWith('"]')) {
+    return JSON.parse(string) // array
+
+  } else if (string.startsWith('{') && string.endsWith('}')) {
+    const jsonString = string.replace(/(\w+):/g, '"$1":')
+    return JSON.parse(jsonString) // map
+
+  } else if (string.includes('°')) {
+    return string // geolocation (string representation)
+
+  } else if (string.startsWith('/')) {
+    return string // reference (string representation)
+
+  } else if (string.includes('UTC')) {
+    return string // datetime (string representation)
+
+  } else {
+    return string // string or id
+  }
+}
+
+function entitiesToCsv(entities) {
+  const header = Object.keys(entities[0]).map((key) => escape(key)).join(',')
+
+  const body = entities.map((entity) => {
+    return Object.values(entity).map((value) => {
+      const valueStr = value === null
+        ? 'null'
+        : Array.isArray(value) || typeof value === 'object'
+          ? JSON.stringify(value)
+          : '' + value
+
+      return escape(valueStr)
+    }).join(',')
+  }).join('\n')
+
+  return `${header}\n${body}`
+}
+
+function escape(value) {
+  if (value.includes('"') || value.includes(',') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`
+  }
+
+  return value
 }
